@@ -40,7 +40,6 @@ id_rsa*
 id_ed25519*
 kubeconfig
 *.kubeconfig
-load-test.yaml
 # ── Docker / build output ─────────────────────────────
 *.tar
 image.tar

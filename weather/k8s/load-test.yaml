@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-test
+  namespace: weather
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: load
+          image: curlimages/curl:latest
+          command: ["sh", "-c"]
+          args:
+            - |
+              USERS=40; DURATION=120
+              END=$(( $(date +%s) + DURATION ))
+              echo "Starting $USERS users for ${DURATION}s"
+              for u in $(seq 1 $USERS); do
+                ( while [ $(date +%s) -lt $END ]; do
+                    curl -s -o /dev/null -X POST -d "city=London" http://weather-web.weather.svc/
+                  done ) &
+              done
+              wait
+              echo "Done"
