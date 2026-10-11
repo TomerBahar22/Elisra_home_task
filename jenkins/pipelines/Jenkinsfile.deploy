@@ -32,7 +32,7 @@ pipeline {
                 }
                 echo "Deploying flask-containers:${env.FLASK_TAG} and nginx-proxy:${env.NGINX_TAG}"
             }
-        
+        }
 
         stage('Pull images') {
             steps {
@@ -61,7 +61,6 @@ pipeline {
                     grep -q nginx-proxy containers.json
                 '''
             }
-        }
         }
     }
 
