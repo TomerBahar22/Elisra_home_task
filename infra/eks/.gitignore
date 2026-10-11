@@ -1,7 +1,0 @@
-terraform.tfvars
-*.tfstate
-*.tfstate.*
-*.tfplan
-tfplan
-.terraform/
-# Keep .terraform.lock.hcl committed

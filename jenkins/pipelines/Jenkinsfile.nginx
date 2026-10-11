@@ -1,6 +1,10 @@
 pipeline {
     agent { label 'docker' }
 
+    triggers {
+        pollSCM('H/5 * * * *')
+    }
+
     environment {
         TRIVY_IMAGE = 'aquasec/trivy:latest'
         IMAGE       = 'tomerbahar2/nginx-proxy'
@@ -13,6 +17,14 @@ pipeline {
     }
 
     stages {
+        stage('Release') {
+            when {
+                anyOf {
+                    changeset 'jenkins/nginx-proxy/**'
+                    triggeredBy 'UserIdCause'
+                }
+            }
+        }
         stage('Read version') {
             steps {
                 script {

@@ -1,6 +1,10 @@
 pipeline {
     agent { label 'docker' }
 
+     triggers {
+        pollSCM('H/5 * * * *')
+    }
+
     environment {
         IMAGE       = 'tomerbahar2/flask-containers'
         APP_DIR     = 'jenkins/flask-app'
@@ -13,6 +17,14 @@ pipeline {
     }
 
     stages {
+        stage('Release') {
+            when {
+                anyOf {
+                    changeset 'jenkins/flask-app/**'
+                    triggeredBy 'UserIdCause'
+                }
+            }
+        
         stage('Read version') {
             steps {
                 script {
@@ -64,6 +76,7 @@ pipeline {
                     '''
                 }
             }
+        }
         }
     }
 
