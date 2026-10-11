@@ -1,6 +1,11 @@
 pipeline {
     agent { label 'docker' }
 
+    triggers {
+        upstream(upstreamProjects: '01-build-flask,02-build-nginx',
+                 threshold: hudson.model.Result.SUCCESS)
+    }
+
     parameters {
         string(name: 'FLASK_TAG', defaultValue: '', description: 'Flask image version. Empty = jenkins/flask-app/VERSION')
         string(name: 'NGINX_TAG', defaultValue: '', description: 'Nginx image version. Empty = jenkins/nginx-proxy/VERSION')
@@ -27,7 +32,7 @@ pipeline {
                 }
                 echo "Deploying flask-containers:${env.FLASK_TAG} and nginx-proxy:${env.NGINX_TAG}"
             }
-        }
+        
 
         stage('Pull images') {
             steps {
@@ -56,6 +61,7 @@ pipeline {
                     grep -q nginx-proxy containers.json
                 '''
             }
+        }
         }
     }
 
