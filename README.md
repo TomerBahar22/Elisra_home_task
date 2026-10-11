@@ -34,7 +34,8 @@ weather/        Part B: app (web + worker), k8s manifests
 - **Flask app:** lists the running containers. It reaches Docker through a **[docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy)** that only allows listing containers, instead of mounting `docker.sock`, which would give it root-level access.
 - **Nginx:** `FROM nginx:1.30.5-alpine3.24`, plus `proxy_pass` to Flask and the source IP injected as `X-Real-IP` / `X-Forwarded-For`.
 - **Deploy:** Nginx is published on **`127.0.0.1:8080` only**. The job checks that binding, `/health` through Nginx, and that the container list includes both apps.
-- **Pipeline:** a critical CVE fails the build before the push. Images get **semver tags** from `VERSION` files, and a tag that already exists can't be pushed again. Job 3 deploys exact versions, never `latest`.
+- **Pipeline:** lint (ruff) and unit tests (pytest) run in a test stage of the Flask Dockerfile, so a failing test fails the build, and the final image has no test tools. Nginx gets a config test (`nginx -t`). A critical CVE fails the build before the push. Images get **semver tags** from `VERSION` files, and a tag that already exists can't be pushed again. Job 3 deploys exact versions, never `latest`.
+- **Triggers:** Jenkins is private, so jobs 1 and 2 **poll GitHub every 5 minutes** and only release when their own app folder changed. Job 3 runs automatically after either of them succeeds.
 
 ## Part B – Weather app on EKS
 
@@ -89,5 +90,5 @@ kubectl apply -f weather/k8s/load-test.yaml && kubectl get hpa -n weather -w   #
 **Teardown:** first delete the Ingress, which removes the ALB and the DNS record. Then run `terraform destroy` in `infra/eks`, then in `infra/core`.
 
 ## Next steps
-- Lint and unit tests, SCM polling triggers, JCasC, and a shared library for jobs 1 and 2.
+- Webhooks instead of polling (an ALB path for `/github-webhook/` only, limited to GitHub's IP ranges), JCasC for the remaining manual Jenkins setup, a shared library for jobs 1 and 2.
 - Build the weather image in Jenkins, add Argo CD for GitOps, Prometheus + Grafana, and WAF rate limiting on the ALB.
