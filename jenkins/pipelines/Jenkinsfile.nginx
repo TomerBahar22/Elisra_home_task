@@ -24,56 +24,65 @@ pipeline {
                     triggeredBy 'UserIdCause'
                 }
             }
-        }
-        stage('Read version') {
-            steps {
-                script {
-                    env.VERSION = readFile("${APP_DIR}/VERSION").trim()
-                    currentBuild.displayName = "#${env.BUILD_NUMBER} v${env.VERSION}"
+            stages {
+                stage('Read version') {
+                    steps {
+                        script {
+                            env.VERSION = readFile("${APP_DIR}/VERSION").trim()
+                            currentBuild.displayName = "#${env.BUILD_NUMBER} v${env.VERSION}"
+                        }
+                        sh '''
+                            echo "$VERSION" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+$' \
+                                || { echo "VERSION must look like 1.2.3, got: $VERSION"; exit 1; }
+
+                            if docker manifest inspect $IMAGE:$VERSION > /dev/null 2>&1; then
+                                echo "$IMAGE:$VERSION already exists. Bump $APP_DIR/VERSION."
+                                exit 1
+                            fi
+                        '''
+                    }
                 }
-                sh '''
-                    echo "$VERSION" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+$' \
-                        || { echo "VERSION must look like 1.2.3, got: $VERSION"; exit 1; }
 
-                    if docker manifest inspect $IMAGE:$VERSION > /dev/null 2>&1; then
-                        echo "$IMAGE:$VERSION already exists. Bump $APP_DIR/VERSION."
-                        exit 1
-                    fi
-                '''
-            }
-        }
-
-        stage('Build image') {
-            steps {
-                dir("${APP_DIR}") {
-                    sh 'docker build -t $IMAGE:$VERSION -t $IMAGE:latest .'
+                stage('Build image') {
+                    steps {
+                        dir("${APP_DIR}") {
+                            sh 'docker build -t $IMAGE:$VERSION -t $IMAGE:latest .'
+                        }
+                    }
                 }
-            }
-        }
 
-        stage('Security scan') {
-            steps {
-                sh '''
-                    docker save $IMAGE:$VERSION -o image.tar
-                    docker run --rm \
-                        -v "$PWD/image.tar:/image.tar:ro" \
-                        -v trivy-cache:/root/.cache/ \
-                        $TRIVY_IMAGE image --input /image.tar \
-                        --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress
-                '''
-            }
-        }
+                stage('Config test') {
+                    steps {
+                        // Nginx resolves "flask-app" at startup; fake it so the check can run
+                        sh 'docker run --rm --add-host flask-app:127.0.0.1 $IMAGE:$VERSION nginx -t'
+                    }
+                }
 
-        stage('Push to Docker Hub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                                                  usernameVariable: 'DH_USER',
-                                                  passwordVariable: 'DH_TOKEN')]) {
-                    sh '''
-                        echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
-                        docker push $IMAGE:$VERSION
-                        docker push $IMAGE:latest
-                    '''
+                stage('Security scan') {
+                    steps {
+                        sh '''
+                            docker save $IMAGE:$VERSION -o image.tar
+                            docker run --rm \
+                                -v "$PWD/image.tar:/image.tar:ro" \
+                                -v trivy-cache:/root/.cache/ \
+                                $TRIVY_IMAGE image --input /image.tar \
+                                --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress
+                        '''
+                    }
+                }
+
+                stage('Push to Docker Hub') {
+                    steps {
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                                          usernameVariable: 'DH_USER',
+                                                          passwordVariable: 'DH_TOKEN')]) {
+                            sh '''
+                                echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+                                docker push $IMAGE:$VERSION
+                                docker push $IMAGE:latest
+                            '''
+                        }
+                    }
                 }
             }
         }
