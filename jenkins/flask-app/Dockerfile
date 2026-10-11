@@ -15,5 +15,7 @@ RUN ruff check . && python -m pytest -q && touch /tmp/tests-passed
 # final
 FROM base AS final
 COPY --from=test /tmp/tests-passed /tmp/tests-passed
+RUN useradd --create-home --uid 10001 appuser
+USER appuser
 EXPOSE 5000
 CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
