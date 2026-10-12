@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: weather-worker
+  name: weather-consumer
   namespace: weather
 spec:
   selector:
-    matchLabels: { app: weather-worker }
+    matchLabels: { app: weather-consumer }
   template:
     metadata:
-      labels: { app: weather-worker }
+      labels: { app: weather-consumer }
     spec:
       terminationGracePeriodSeconds: 30
       containers:
-        - name: worker
+        - name: consumer
           image: tomerbahar2/weather-queue:1.0.0
-          command: ["python", "worker.py"]   # same image, worker role
+          command: ["python", "worker.py"]   # same image, consumer role
           env:
             - name: RABBITMQ_HOST
               valueFrom: { secretKeyRef: { name: rabbitmq-default-user, key: host } }
