@@ -1,5 +1,5 @@
 # Elistra Home Task
-Two parts - jenkins jobs and weather app on k8s with queue service
+Two parts: Jenkins jobs that build, push and verify containers, and a weather app on Kubernetes with a queue and autoscaling.
 
 | Part | What | Status |
 |---|---|---|
@@ -13,7 +13,7 @@ infra/core/     Terraform: VPC, Jenkins controller, agent prerequisites
 infra/packer/   Packer: golden AMI for Jenkins agents
 infra/eks/      Terraform: EKS + add-ons (ALB controller, ExternalDNS, cert-manager, KEDA)
 jenkins/        Part A: seed.groovy, Jenkinsfiles, flask-app, nginx-proxy, deploy
-weather/        Part B: app (web + worker), k8s manifests
+weather/        Part B: app (web + consumer), k8s manifests
 ```
 
 ## Infrastructure
@@ -44,20 +44,20 @@ flowchart LR
     user[User] -- HTTPS --> alb[ALB]
     alb --> web["web (Flask)"]
     web -- request --> q[("RabbitMQ")]
-    q --> worker["worker 1–10"]
-    worker --> api[weatherapi.com]
-    worker -- reply --> q -- reply --> web
+    q --> consumer["consumer 1–10"]
+    consumer --> api[weatherapi.com]
+    consumer -- reply --> q -- reply --> web
     keda[KEDA] -. queue length .-> q
-    keda -. scale .-> worker
+    keda -. scale .-> consumer
 ```
 
-- **One image, two roles:** the **web** (`gunicorn app:app`) serves the page. The **worker** (`python worker.py`) calls the weather API. They are separate Deployments, so each scales on its own.
+- **One image, two roles:** the **web** (`gunicorn app:app`) serves the page and the city autocomplete. The **consumer** (`python worker.py`) takes requests from the queue and calls the weather API. They are separate Deployments, so each scales on its own.
 - **Request-reply:** the web publishes the lookup with `reply_to` and a `correlation_id`, then waits up to 30 seconds for the reply. Messages expire after that, so stale requests are dropped.
-- **No lost requests:** a worker acks a message only after replying (`prefetch_count=1`). If a worker is scaled down mid-request, RabbitMQ redelivers the message.
+- **No lost requests:** a consumer acks a message only after replying (`prefetch_count=1`). If a consumer is scaled down mid-request, RabbitMQ redelivers the message.
 - **RabbitMQ:** deployed with the official Cluster Operator, on a persistent EBS volume.
 - **Ingress:** the AWS Load Balancer Controller creates the ALB (HTTPS with an ACM certificate), and ExternalDNS creates the Route 53 record.
-- **KEDA:** scales the workers on queue length, targeting about 5 waiting messages per worker, between 1 and 10 workers, with a 30-second scale-down window.
-- **Load test:** `load-test.yaml` runs 40 concurrent users for 2 minutes. It scaled the workers from **1 to 7**, and back to 1 once the queue drained.
+- **KEDA:** scales the consumers on queue length, targeting about 5 waiting messages per consumer, between 1 and 10 consumers, with a 30-second scale-down window.
+- **Load test:** `load-test.yaml` runs 40 concurrent users for 2 minutes. It scaled the consumers from **1 to 7**, and back to 1 once the queue drained.
 
 ## Getting started
 **Prerequisites:** AWS CLI profile, Terraform ≥ 1.10, Packer, kubectl, an S3 state bucket, a Route 53 zone with an ACM certificate, Docker Hub, and a weatherapi.com key.
@@ -72,19 +72,24 @@ $(terraform output -raw kubeconfig_command)
 ```
 
 **Jenkins:**
-1. Open the UI: `terraform -chdir=infra/core output -raw jenkins_ui_command | bash`.
+1. Open the UI: `$(terraform -chdir=infra/core output -raw jenkins_ui_command)`, then http://localhost:8080.
 2. Install the **Amazon EC2** and **Job DSL** plugins.
 3. Add the credentials `ec2-agent-key` and `dockerhub-creds`.
 4. Add an EC2 cloud using the Packer AMI and the label `docker`.
-5. Create `seed-job`, which runs `jenkins/seed.groovy`, then run the three jobs.
+5. Create `seed-job`, which runs `jenkins/seed.groovy`, then run the three jobs once by hand (this also registers their triggers).
 
 **Weather app:**
 ```bash
 kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/download/v2.23.0/cluster-operator.yml
 kubectl apply -f weather/k8s/00-namespace.yaml
 kubectl create secret generic weather-api -n weather --from-literal=API_WEATHER='<key>'
-kubectl apply -f weather/k8s/
-kubectl apply -f weather/k8s/load-test.yaml && kubectl get hpa -n weather -w   # load test
+kubectl apply $(printf -- '-f %s ' weather/k8s/[0-9]*.yaml)    # numbered manifests only, not the load test
+```
+
+**Load test:**
+```bash
+kubectl apply -f weather/k8s/load-test.yaml
+kubectl get hpa -n weather -w
 ```
 
 **Teardown:** first delete the Ingress, which removes the ALB and the DNS record. Then run `terraform destroy` in `infra/eks`, then in `infra/core`.

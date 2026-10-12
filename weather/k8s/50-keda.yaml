@@ -12,12 +12,12 @@ spec:
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: weather-worker
+  name: weather-consumer
   namespace: weather
 spec:
   scaleTargetRef:
-    name: weather-worker # the name of the Deployment to scale
-  minReplicaCount: 1 # one worker always ready (users wait for replies)
+    name: weather-consumer # the name of the Deployment to scale
+  minReplicaCount: 1 # one consumer always ready (users wait for replies)
   maxReplicaCount: 10
   pollingInterval: 5 # check the queue every 5 seconds
   advanced:
