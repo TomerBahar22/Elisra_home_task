@@ -1,4 +1,4 @@
-def repoUrl    = 'https://github.com/TomerBahar22/Elistra_home_task.git'
+def repoUrl    = 'https://github.com/TomerBahar22/Elisra_home_task.git'
 def branchName = binding.hasVariable('BRANCH') ? BRANCH : 'main'
 
 def jobs = [
