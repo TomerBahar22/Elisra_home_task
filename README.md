@@ -1,4 +1,4 @@
-# Elistra Home Task
+# Elisra Home Task
 Two parts: Jenkins jobs that build, push and verify containers, and a weather app on Kubernetes with a queue and autoscaling.
 
 | Part | What | Status |
